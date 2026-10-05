@@ -1,0 +1,7 @@
+node_modules
+.next
+data
+*.dump
+*.tar.gz
+.env
+rclone.conf

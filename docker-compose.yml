@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kontrakan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: kontrakan
+      TZ: Asia/Jakarta
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432" # lokal/dev + pg_dump darurat; di server batasi via firewall
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kontrakan -d kontrakan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://kontrakan:${POSTGRES_PASSWORD:-changeme}@db:5432/kontrakan
+      AUTH_SECRET: ${AUTH_SECRET:-changeme-generate-openssl-rand-hex-32}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-agusprnyt@gmail.com}
+      UPLOAD_DIR: /app/data/uploads
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-2097152}
+      TZ: Asia/Jakarta
+    volumes:
+      - uploads:/app/data/uploads
+      - backup-tmp:/tmp/backup:ro # baca status BACKUP_LAST_OK utk halaman Pengaturan
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  backup:
+    image: alpine:3.20
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      RCLONE_GDRIVE_TOKEN: ${RCLONE_GDRIVE_TOKEN:-}
+      GDRIVE_FOLDER: ${GDRIVE_FOLDER:-web-kontrakan-backup}
+      BACKUP_CRON: ${BACKUP_CRON:-0 2 * * 0}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      TZ: Asia/Jakarta
+    volumes:
+      - pgdata:/pgdata:ro
+      - uploads:/uploads:ro
+      - ./backup:/backup-scripts:ro
+      - backup-tmp:/tmp/backup
+      - ./rclone.conf:/root/.config/rclone/rclone.conf:ro
+    entrypoint: ["/bin/sh", "/backup-scripts/run.sh"]
+
+volumes:
+  pgdata:
+  uploads:
+  backup-tmp:

@@ -1,0 +1,5 @@
+# contoh — ganti dengan hasil `rclone config` (lihat backup/README.md)
+# [gdrive]
+# type = drive
+# scope = drive.file
+# token = {"access_token":"..."}

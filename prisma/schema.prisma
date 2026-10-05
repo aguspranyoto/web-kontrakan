@@ -1,0 +1,146 @@
+// Prisma schema — web-kontrakan (PRD §7 + §10.2)
+// DB: PostgreSQL 16. Upload hanya bukti TF (Payment.proofPath).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String   @default("Owner")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Property {
+  id        String   @id @default(cuid())
+  name      String
+  address   String   @default("")
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  units     Unit[]
+  expenses  Expense[]
+}
+
+enum UnitStatus {
+  VACANT
+  OCCUPIED
+  MAINTENANCE
+}
+
+model Unit {
+  id           String     @id @default(cuid())
+  propertyId   String
+  property     Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  code         String // A1, B2, Pintu 3
+  monthlyPrice Int // IDR, snapshot source untuk Bill.amount
+  status       UnitStatus @default(VACANT)
+  note         String     @default("")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  leases       Lease[]
+  bills        Bill[]
+
+  @@unique([propertyId, code])
+  @@index([propertyId, status])
+}
+
+model Tenant {
+  id               String   @id @default(cuid())
+  name             String // req kakak #2, wajib
+  phoneWa          String // req kakak #1, wajib, simpan format 62xx
+  idNumber         String   @default("")
+  emergencyContact String   @default("")
+  note             String   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  leases           Lease[]
+  bills            Bill[]
+
+  @@index([name])
+}
+
+model Lease {
+  id                   String    @id @default(cuid())
+  unitId               String
+  unit                 Unit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  tenantId             String
+  tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  startDate            DateTime
+  endDate              DateTime?
+  monthlyPriceSnapshot Int
+  deposit              Int       @default(0)
+  active               Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  bills                Bill[]
+
+  @@index([unitId, active])
+  @@index([tenantId, active])
+}
+
+model Bill {
+  id        String   @id @default(cuid())
+  leaseId   String
+  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  unitId    String
+  unit      Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  period    String // YYYY-MM
+  amount    Int // snapshot harga, bisa edit manual
+  dueDate   DateTime // req kakak #3, wajib
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  payment   Payment?
+
+  @@unique([unitId, period])
+  @@index([period, dueDate])
+  @@index([tenantId, period])
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  billId    String        @unique
+  bill      Bill          @relation(fields: [billId], references: [id], onDelete: Cascade)
+  paidAt    DateTime      @default(now())
+  amount    Int
+  method    PaymentMethod
+  proofPath String        @default("") // relatif bukti/..., wajib bila TRANSFER, kosong bila CASH
+  note      String        @default("")
+  createdAt DateTime      @default(now())
+
+  @@index([paidAt])
+}
+
+model Expense {
+  id         String   @id @default(cuid())
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  date       DateTime
+  category   String   @default("Lainnya")
+  amount     Int
+  note       String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([date])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
