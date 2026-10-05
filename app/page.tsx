@@ -55,6 +55,9 @@ export default function Home() {
   const [billPeriod, setBillPeriod] = useState(thisMonth());
   const [billStatus, setBillStatus] = useState("all");
   const [payAmount, setPayAmount] = useState(0);
+  const [selProp, setSelProp] = useState<string | null>(null);
+  const [unitPage, setUnitPage] = useState(1);
+  const UNIT_PER_PAGE = 9;
 
   const props = useQuery({
     queryKey: ["properties"],
@@ -242,39 +245,92 @@ export default function Home() {
         </TabsContent>
 
         <TabsContent value="properti" className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-semibold">Kontrakan & unit</h2>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => openSheet("unit-form")}>+ Unit</Button>
-              <Button size="sm" onClick={() => openSheet("property-form")}>+ Kontrakan</Button>
-            </div>
-          </div>
-          {(props.data ?? []).map((p) => (
-            <Card key={p.id}>
-              <CardHeader className="pb-2"><CardTitle className="text-base">{p.name}</CardTitle></CardHeader>
-              <CardContent className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{p.address || "-"} · {p._count.units} unit</span>
-                <Button size="sm" variant="outline" onClick={() => openSheet("property-form", undefined, p.id)}>Ubah</Button>
-              </CardContent>
-            </Card>
-          ))}
-          {props.data?.length === 0 && <p className="text-sm text-muted-foreground">Belum ada kontrakan.</p>}
-          {(units.data ?? []).map((u) => (
-            <Card key={u.id}>
-              <CardContent className="flex items-center justify-between gap-2 pt-4 text-sm">
-                <div>
-                  <p className="font-medium">{u.property.name} · {u.code}</p>
-                  <p className="text-xs text-muted-foreground">{formatIDR(u.monthlyPrice)}/bln</p>
+          {(() => {
+            const propList = props.data ?? [];
+            const activeProp = propList.find((p) => p.id === selProp) ?? propList[0] ?? null;
+            const filteredUnits = (units.data ?? []).filter((u) => activeProp && u.propertyId === activeProp.id);
+            const pages = Math.max(1, Math.ceil(filteredUnits.length / UNIT_PER_PAGE));
+            const safePage = Math.min(unitPage, pages);
+            const pageUnits = filteredUnits.slice((safePage - 1) * UNIT_PER_PAGE, safePage * UNIT_PER_PAGE);
+            const pick = (id: string) => { setSelProp(id); setUnitPage(1); };
+            return (
+              <div className="grid gap-3 md:grid-cols-[280px_1fr]">
+                {/* KIRI: list kontrakan 1 kolom */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="font-semibold">Kontrakan</h2>
+                    <Button size="sm" onClick={() => openSheet("property-form")}>+ Kontrakan</Button>
+                  </div>
+                  {propList.map((p) => {
+                    const selected = activeProp?.id === p.id;
+                    return (
+                      <Card
+                        key={p.id}
+                        onClick={() => pick(p.id)}
+                        className={`cursor-pointer transition-colors ${selected ? "border-primary ring-1 ring-primary" : ""}`}
+                      >
+                        <CardHeader className="pb-1">
+                          <CardTitle className="text-base">{p.name}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">{p.address || "-"} · {p._count.units} unit</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => { e.stopPropagation(); openSheet("property-form", undefined, p.id); }}
+                          >
+                            Ubah
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                  {propList.length === 0 && <p className="text-sm text-muted-foreground">Belum ada kontrakan.</p>}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={u.status === "OCCUPIED" ? "default" : u.status === "MAINTENANCE" ? "destructive" : "secondary"}>
-                    {u.status === "OCCUPIED" ? "Terisi" : u.status === "MAINTENANCE" ? "Rusak" : "Kosong"}
-                  </Badge>
-                  <Button size="sm" variant="ghost" onClick={() => openSheet("unit-form", undefined, u.id)}>Ubah</Button>
+                {/* KANAN: grid unit kontrakan terpilih + pagination */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="font-semibold">Unit{activeProp ? ` · ${activeProp.name}` : ""}</h2>
+                    <Button size="sm" variant="outline" onClick={() => openSheet("unit-form")}>+ Unit</Button>
+                  </div>
+                  {filteredUnits.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {activeProp ? "Belum ada unit di kontrakan ini." : "Pilih kontrakan di kiri."}
+                    </p>
+                  )}
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                    {pageUnits.map((u) => (
+                      <Card key={u.id}>
+                        <CardContent className="flex flex-col gap-2 pt-4 text-sm">
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="text-lg font-bold">{u.code}</p>
+                            <Badge variant={u.status === "OCCUPIED" ? "default" : u.status === "MAINTENANCE" ? "destructive" : "secondary"}>
+                              {u.status === "OCCUPIED" ? "Terisi" : u.status === "MAINTENANCE" ? "Rusak" : "Kosong"}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{formatIDR(u.monthlyPrice)}/bln</p>
+                          <Button size="sm" variant="ghost" className="w-full" onClick={() => openSheet("unit-form", undefined, u.id)}>
+                            Ubah
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                  {pages > 1 && (
+                    <div className="flex items-center justify-center gap-2 pt-1">
+                      <Button size="sm" variant="outline" disabled={safePage <= 1} onClick={() => setUnitPage(safePage - 1)}>
+                        ← Prev
+                      </Button>
+                      <span className="text-sm text-muted-foreground">{safePage} / {pages}</span>
+                      <Button size="sm" variant="outline" disabled={safePage >= pages} onClick={() => setUnitPage(safePage + 1)}>
+                        Next →
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              </div>
+            );
+          })()}
         </TabsContent>
 
         <TabsContent value="penghuni" className="flex flex-col gap-3">
