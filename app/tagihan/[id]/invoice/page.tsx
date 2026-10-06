@@ -28,7 +28,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         </div>
         <div className="flex justify-end">
           <Image
-            src="/logo_kontrakan_pak_latif.png"
+            src="/logo-kontrakan-pak-latif.png"
             alt="Kontrakan Pak Latif"
             width={220}
             height={147}
