@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import Image from "next/image";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { PrintButton } from "@/components/print-button";
@@ -25,9 +26,15 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           <h1 className="text-xl font-bold">INVOICE / KUITANSI</h1>
           <p className="text-sm text-neutral-600">{no}</p>
         </div>
-        <div className="text-right text-sm">
-          <p className="font-semibold">{bill.unit.property.name}</p>
-          <p className="text-neutral-600">{bill.unit.property.address}</p>
+        <div className="flex justify-end">
+          <Image
+            src="/logo_kontrakan_pak_latif.png"
+            alt="Kontrakan Pak Latif"
+            width={220}
+            height={147}
+            className="h-20 w-auto object-contain"
+            priority
+          />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4 py-4 text-sm">
@@ -35,7 +42,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           <p className="text-neutral-500">Diterima dari</p>
           <p className="font-semibold">{bill.tenant.name}</p>
           <p>{bill.tenant.phoneWa}</p>
-          <p>Unit {bill.unit.code}</p>
+          {/* <p>Unit {bill.unit.code}</p> */}
         </div>
         <div className="text-right">
           <p className="text-neutral-500">Periode</p>
@@ -44,7 +51,16 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           <p>Dibayar: {formatDateID(bill.payment.paidAt)} ({bill.payment.method})</p>
         </div>
       </div>
-      <table className="w-full border-collapse text-sm">
+      <div className="relative">
+        <Image
+          src="/lunas.png"
+          alt="LUNAS"
+          width={560}
+          height={373}
+          className="opacity-50 pointer-events-none absolute top-1/2 left-1/2 z-10 w-[420px] max-w-[90%] -translate-x-1/2 -translate-y-1/2 -rotate-12 object-contain select-none"
+          priority
+        />
+        <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-y bg-neutral-100">
             <th className="p-2 text-left">Keterangan</th>
@@ -53,7 +69,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         </thead>
         <tbody>
           <tr className="border-b">
-            <td className="p-2">Sewa {bill.unit.code} periode {periodLabel(bill.period)}</td>
+            <td className="p-2">Sewa periode {periodLabel(bill.period)}</td>
             <td className="p-2 text-right">{formatIDR(bill.amount)}</td>
           </tr>
           <tr>
@@ -62,9 +78,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           </tr>
         </tbody>
       </table>
-      <div className="flex justify-between pt-8 text-sm">
-        <p className="text-neutral-500">{bill.payment.note || no}</p>
-        <div className="text-center">
+      </div>
+      <div className="flex justify-end pt-8 text-sm">
+        <div className="text-end">
           <p>Hormat kami,</p>
           <p className="mt-12 font-semibold">{owner?.value ?? "Owner"}</p>
         </div>
