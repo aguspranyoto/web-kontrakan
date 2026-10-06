@@ -32,7 +32,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             alt="Kontrakan Pak Latif"
             width={220}
             height={147}
-            className="h-20 w-auto object-contain"
+            className="h-12 w-auto object-contain"
             priority
           />
         </div>
