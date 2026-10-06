@@ -16,7 +16,7 @@ export function tagihText(opts: {
 }): string {
   return (
     `Yth Bpk/Ibu ${opts.tenantName}, ` +
-    `tagihan kontrakan ${opts.propertyName} ${opts.unitCode} periode ${opts.periodLabel} ` +
+    `tagihan kontrakan ${opts.propertyName} periode ${opts.periodLabel} ` +
     `sebesar ${formatIDR(opts.amount)} jatuh tempo ${formatDateID(opts.dueDate)}. ` +
     `Mohon transfer/kirim bukti. Terima kasih - ${opts.ownerName}`
   );
@@ -32,7 +32,7 @@ export function telatText(opts: {
 }): string {
   return (
     `Yth Bpk/Ibu ${opts.tenantName}, ` +
-    `tagihan ${opts.unitCode} periode ${opts.periodLabel} ${formatIDR(opts.amount)} ` +
+    `tagihan periode ${opts.periodLabel} ${formatIDR(opts.amount)} ` +
     `sudah TELAT ${opts.lateDays} hari. Mohon segera dibayar. Terima kasih - ${opts.ownerName}`
   );
 }
@@ -45,7 +45,7 @@ export function lunasText(opts: {
   ownerName: string;
 }): string {
   return (
-    `Terima kasih Bpk/Ibu ${opts.tenantName} (${opts.unitCode}) periode ${opts.periodLabel} ` +
+    `Terima kasih Bpk/Ibu ${opts.tenantName} periode ${opts.periodLabel} ` +
     `${formatIDR(opts.amount)} sudah kami terima. - ${opts.ownerName}`
   );
 }

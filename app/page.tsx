@@ -123,6 +123,15 @@ export default function Home() {
     },
     enabled: tab === "kas",
   });
+  const settings = useQuery({
+    queryKey: ["settings"],
+    queryFn: async () => {
+      const r = await fetch("/api/settings");
+      if (!r.ok) throw new Error("Gagal muat pengaturan");
+      return (await r.json()) as { ownerName: string };
+    },
+  });
+  const ownerName = settings.data?.ownerName || "Owner";
 
   const checkout = useMutation({
     mutationFn: async (id: string) => {
@@ -167,8 +176,8 @@ export default function Home() {
   function waTagih(b: Bill) {
     const late = daysLate(b.dueDate);
     const text = late > 0
-      ? telatText({ tenantName: b.tenant.name, unitCode: `${b.unit.property.name} ${b.unit.code}`, periodLabel: periodLabel(b.period), amount: b.amount, lateDays: late, ownerName: "Owner" })
-      : tagihText({ tenantName: b.tenant.name, unitCode: b.unit.code, propertyName: b.unit.property.name, periodLabel: periodLabel(b.period), amount: b.amount, dueDate: b.dueDate, ownerName: "Owner" });
+      ? telatText({ tenantName: b.tenant.name, unitCode: `${b.unit.property.name} ${b.unit.code}`, periodLabel: periodLabel(b.period), amount: b.amount, lateDays: late, ownerName })
+      : tagihText({ tenantName: b.tenant.name, unitCode: b.unit.code, propertyName: b.unit.property.name, periodLabel: periodLabel(b.period), amount: b.amount, dueDate: b.dueDate, ownerName });
     window.open(waLink(b.tenant.phoneWa, text), "_blank");
     toast.success("Template WA dibuka");
   }
@@ -413,7 +422,7 @@ export default function Home() {
                     <>
                       <Button size="sm" variant="outline" onClick={() => window.open(`/tagihan/${b.id}/invoice`, "_blank")}>Invoice</Button>
                       <Button size="sm" variant="ghost" onClick={() => {
-                        window.open(waLink(b.tenant.phoneWa, lunasText({ tenantName: b.tenant.name, unitCode: b.unit.code, periodLabel: periodLabel(b.period), amount: b.amount, ownerName: "Owner" })), "_blank");
+                        window.open(waLink(b.tenant.phoneWa, lunasText({ tenantName: b.tenant.name, unitCode: b.unit.code, periodLabel: periodLabel(b.period), amount: b.amount, ownerName })), "_blank");
                         toast.success("Template lunas dibuka");
                       }}>WA lunas</Button>
                       <Button size="sm" variant="ghost" onClick={() => voidPay.mutate(b.id)}>Void</Button>
