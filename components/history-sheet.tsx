@@ -10,7 +10,7 @@ type Hist = {
   id: string; active: boolean; startDate: string; endDate: string | null; monthlyPriceSnapshot: number;
   unit: { code: string; property: { name: string } };
   tenant: { name: string; phoneWa: string };
-  bills: { id: string; period: string; amount: string | number; dueDate: string; payment: { method: string } | null }[];
+  bills: { id: string; period: string; amount: string | number; dueDate: string; payments: { amount: number; method: string }[] }[];
 };
 
 // Drawer riwayat huni 1 penghuni: unit mana, periode, tagihan + status lunas
@@ -38,12 +38,18 @@ export function HistorySheet() {
                 {formatDateID(h.startDate)} → {h.endDate ? formatDateID(h.endDate) : "sekarang"} · {formatIDR(h.monthlyPriceSnapshot)}/bln
               </p>
               <div className="mt-2 flex flex-col gap-1">
-                {h.bills.map((b) => (
-                  <div key={b.id} className="flex items-center justify-between text-xs">
-                    <span>{periodLabel(b.period)} · {formatIDR(Number(b.amount))}</span>
-                    <Badge variant={b.payment ? "outline" : "destructive"}>{b.payment ? `Lunas ${b.payment.method}` : "Belum"}</Badge>
-                  </div>
-                ))}
+                {h.bills.map((b) => {
+                  const paid = b.payments.reduce((s, p) => s + p.amount, 0);
+                  const st = paid >= Number(b.amount) ? "paid" : paid > 0 ? "partial" : "unpaid";
+                  return (
+                    <div key={b.id} className="flex items-center justify-between text-xs">
+                      <span>{periodLabel(b.period)} · {formatIDR(Number(b.amount))}</span>
+                      <Badge variant={st === "paid" ? "outline" : st === "partial" ? "secondary" : "destructive"}>
+                        {st === "paid" ? `Lunas ${b.payments[0]?.method ?? ""}` : st === "partial" ? `Sebagian ${formatIDR(paid)}` : "Belum"}
+                      </Badge>
+                    </div>
+                  );
+                })}
                 {h.bills.length === 0 && <p className="text-xs text-muted-foreground">Belum ada tagihan.</p>}
               </div>
             </div>

@@ -12,9 +12,9 @@ const patchSchema = z.object({
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   await requireUser();
   const { id } = await params;
-  const bill = await db.bill.findUnique({ where: { id }, include: { payment: true } });
+  const bill = await db.bill.findUnique({ where: { id }, include: { payments: { select: { id: true } } } });
   if (!bill) return NextResponse.json({ error: "Tagihan tidak ada" }, { status: 404 });
-  if (bill.payment) return NextResponse.json({ error: "Tagihan lunas tidak bisa diubah" }, { status: 409 });
+  if (bill.payments.length > 0) return NextResponse.json({ error: "Tagihan yg sudah ada pembayaran tidak bisa diubah (void dulu)" }, { status: 409 });
   const body = await req.json().catch(() => ({}));
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success)
@@ -26,9 +26,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   await requireUser();
   const { id } = await params;
-  const bill = await db.bill.findUnique({ where: { id }, include: { payment: true } });
+  const bill = await db.bill.findUnique({ where: { id }, include: { payments: { select: { id: true } } } });
   if (!bill) return NextResponse.json({ error: "Tagihan tidak ada" }, { status: 404 });
-  if (bill.payment) return NextResponse.json({ error: "Tagihan lunas tidak bisa dihapus" }, { status: 409 });
+  if (bill.payments.length > 0) return NextResponse.json({ error: "Tagihan yg sudah ada pembayaran tidak bisa dihapus (void dulu)" }, { status: 409 });
   await db.bill.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

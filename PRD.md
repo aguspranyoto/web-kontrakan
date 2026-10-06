@@ -1,6 +1,6 @@
 # PRD — web-kontrakan (KelolaPro Clone Privat)
 
-**Versi:** 0.3 locked — 5 Oct 2026 (Postgres + backup Drive + UX SPA)
+**Versi:** 0.4 — 6 Oct 2026 (cicilan/partial + bayar multi-periode + invoice gabungan; sebelumnya 0.3 locked 5 Oct 2026)
 **Pemilik:** pribadi (single owner, private server Docker)
 **Referensi:** kelolapro.com — Aplikasi Manajemen Kost
 **Repo/folder:** `/web-kontrakan`
@@ -86,15 +86,18 @@ MVP tidak perlu kontrak kompleks. Cukup relasi:
 - List dengan filter: properti, periode, status. **Badge: merah OVERDUE H+N, kuning JATUH TEMPO ≤7 hari, hijau LUNAS, abu BELUM BAYAR.**
 - Detail tagihan: info penghuni/unit, timeline bayar.
 
-### 4.6 Pembayaran (Manual + Bukti) — [Req kakak #6]
+### 4.6 Pembayaran (Manual + Bukti + Cicilan) — [Req kakak #6] (v0.4: multi-payment)
 - Form bayar: tanggal bayar (default hari ini), nominal (default = sisa tagihan), **metode wajib: CASH | TRANSFER** (req #6, radio button sederhana), catatan, upload bukti.
 - Bukti: **hanya untuk TRANSFER (wajib 1 gambar). CASH = tanpa upload.** Validasi jpg/png/webp, tolak >2MB, auto-kompres <500KB (lihat §10.2).
-- 1 tagihan = 1 pembayaran lunas di MVP (tanpa cicilan parsial — cicilan = Phase 2).
+- **1 tagihan boleh banyak pembayaran (cicilan/nyicil):** nominal custom 1..sisa, tolak > sisa (TF selalu pas). Status `paid` jika total >= tagihan, `partial`/`Nyicil` jika sebagian. Badge + filter "Nyicil/sebagian".
+- **Bayar multi-periode sekaligus (cth. Sept+Okt+Nov):** checkbox di tab Tagihan → 1 dialog bulk (nominal per bulan default sisa, bisa diubah) → 1 pembayaran per bulan, 1 file bukti dipakai bersama bila TRANSFER. Validasi: semua tagihan 1 penghuni yg sama.
+- Void per baris pembayaran (riwayat di kartu tagihan). File bukti dihapus hanya jika tak dipakai pembayaran lain.
 - Upload tersimpan di volume Docker lokal `/app/data/uploads`, diserve via Next.js, bukan di DB.
-- Setelah bayar → status `paid`, simpan `paid_at`. Bisa batalkan (void) dengan konfirmasi + hapus file.
 
-### 4.7 Invoice / Kuitansi PDF — [Req kakak #7]
-- Tombol unduh/cetak **Invoice** per tagihan lunas (req #7, disebut juga kuitansi).
+### 4.7 Invoice / Kuitansi PDF — [Req kakak #7] (v0.4: invoice gabungan)
+- Tombol unduh/cetak **Invoice** per tagihan yg ada pembayaran (lunas maupun nyicil; tanpa pembayaran = 404 cegah invoice palsu).
+- **Invoice gabungan** `/tagihan/invoice?ids=...`: 1 kuitansi utk bayar banyak periode (baris Sept, Okt, Nov ke bawah + TOTAL TAGIHAN / TOTAL DIBAYAR / SISA). No. `INV/GAB/YYYYMM/XXX`.
+- Stempel LUNAS hanya bila semua lunas; cicilan tampil status sisa per baris (tanpa stempel).
 - Isi wajib: no. invoice (`INV/YYYYMM/XXX`), nama penghuni + telp, unit/properti, periode sewa, tanggal jatuh tempo, harga, tgl bayar, metode (CASH/TRANSFER), nominal + terbilang, nama owner.
 - Implementasi MVP: halaman print-friendly `/tagihan/[id]/invoice` + tombol Cetak/Save PDF browser (nol dependensi berat). `react-pdf` = Phase 2 bila butuh file PDF biner.
 - Invoice hanya bisa dicetak untuk tagihan `paid` (cegah invoice palsu).
@@ -175,12 +178,12 @@ Lease(id, unitId FK, tenantId FK, startDate, endDate?, monthlyPriceSnapshot, dep
   @@unique([unitId, active]) partial — ditegakkan via app logic (1 aktif per unit)
 Bill(id, leaseId FK, unitId FK, tenantId FK, period YYYY-MM, amount snapshot, dueDate date required, status, note, createdAt)
   @@unique([unitId, period])  // anti duplikat generate
-Payment(id, billId FK unique, paidAt, amount, method: CASH|TRANSFER required, proofPath?, note)
+Payment(id, billId FK non-unique + index, paidAt, amount, method: CASH|TRANSFER required, proofPath?, note) // v0.4: 1 bill boleh N payment (cicilan); 1 file bukti boleh dipakai N payment (bulk)
 Expense(id, propertyId? FK, date, category, amount, note, proofPath?)
 Setting(key unique, value) // cth. defaultDueDay=5, ownerName utk template WA/invoice
 ```
 
-Catatan: `Bill.amount` snapshot (tidak ikut berubah saat harga unit berubah). `Bill.status` dihitung: `paid` jika ada Payment, else `overdue` jika now > dueDate, else `unpaid`. `Payment.proofPath` wajib bila TRANSFER.
+Catatan: `Bill.amount` snapshot (tidak ikut berubah saat harga unit berubah). Status dihitung dari total payment: `paid` jika total >= amount, `partial` jika 0 < total < amount, else `overdue` jika now > dueDate, else `unpaid`. `Payment.proofPath` wajib bila TRANSFER.
 
 ## 8. Halaman / Routes MVP
 
@@ -255,7 +258,9 @@ Acceptance ops: fresh clone → `cp .env.example .env` → `docker compose up -d
 2. Buat 1 properti + 3 unit (isi harga) + 2 penghuni + check-in 2 unit (#4).
 3. Generate tagihan Jan 2026 dengan jatuh tempo tgl 5 → 2 tagihan muncul dengan dueDate benar, generate ulang tidak duplikat (#3).
 4. Dashboard tampil banner merah + badge H+N untuk yg overdue, kuning H-7 untuk yg dekat (#5).
-5. Bayar 1 tagihan via CASH tanpa bukti → lunas; bayar 1 via TRANSFER wajib upload bukti (#6).
+5. Bayar 1 tagihan via CASH tanpa bukti → lunas; bayar 1 via TRANSFER wajib upload bukti (#6). Bayar sebagian (nyicil) → badge Nyicil + sisa, tombol Bayar sisa tetap ada; nominal > sisa ditolak.
+5b. Bayar 3 bulan sekaligus (bulk) → 3 pembayaran + invoice gabungan 3 baris + total benar. TRANSFER bulk = 1 bukti dipakai bersama.
+5c. Void 1 cicilan → sisa bertambah lagi; file bukti tetap ada selama dipakai pembayaran lain.
 6. Klik WA tagih → terbuka wa.me dengan teks + nomor 62 + nominal + jatuh tempo benar.
 7. Cetak Invoice tagihan lunas → ada no. INV, nama/telp, periode, jatuh tempo, metode (#7). Tagihan belum lunas tidak bisa cetak.
 8. Input 1 pengeluaran → laporan kas akurat + CSV terunduh.

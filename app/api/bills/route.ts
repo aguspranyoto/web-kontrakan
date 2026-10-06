@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/require-user";
+import { paidTotal, remaining, billStatus, lateDays } from "@/lib/bill-status";
 import { generateBillsSchema } from "@/lib/validations";
 
-// GET /api/bills?propertyId=&period=YYYY-MM&status=unpaid|paid|overdue
+// GET /api/bills?propertyId=&period=YYYY-MM&status=unpaid|partial|paid|overdue
 export async function GET(req: Request) {
   await requireUser();
   const { searchParams } = new URL(req.url);
   const propertyId = searchParams.get("propertyId") || undefined;
   const period = searchParams.get("period") || undefined;
-  const status = searchParams.get("status") || undefined; // overdue dihitung
+  const status = searchParams.get("status") || undefined; // overdue/partial dihitung
 
   const bills = await db.bill.findMany({
     where: {
@@ -19,19 +20,26 @@ export async function GET(req: Request) {
     include: {
       unit: { include: { property: true } },
       tenant: true,
-      payment: true,
+      payments: { orderBy: { paidAt: "asc" } },
     },
     orderBy: [{ dueDate: "asc" }],
     take: 500,
   });
 
   const now = new Date();
-  const withStatus = bills.map((b) => ({
-    ...b,
-    computedStatus: b.payment ? "paid" : b.dueDate < now ? "overdue" : "unpaid",
-    lateDays: b.payment ? 0 : Math.max(0, Math.floor((now.getTime() - new Date(b.dueDate).getTime()) / 86400000)),
-  }));
-  const filtered = status ? withStatus.filter((b) => b.computedStatus === status) : withStatus;
+  const withStatus = bills.map((b) => {
+    const paid = paidTotal(b);
+    const rest = remaining(b);
+    const st = billStatus(b, now);
+    return {
+      ...b,
+      paidTotal: paid,
+      remaining: rest,
+      computedStatus: st,
+      lateDays: st === "paid" ? 0 : lateDays(b.dueDate, now),
+    };
+  });
+  const filtered = status && status !== "all" ? withStatus.filter((b) => b.computedStatus === status) : withStatus;
   return NextResponse.json(filtered);
 }
 

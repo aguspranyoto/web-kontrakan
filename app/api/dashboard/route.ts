@@ -14,7 +14,7 @@ export async function GET(req: Request) {
 
   const [units, bills, paymentsMonth, expensesMonth] = await Promise.all([
     db.unit.findMany({ include: { leases: { where: { active: true } } } }),
-    db.bill.findMany({ include: { payment: true, unit: { include: { property: true } }, tenant: true } }),
+    db.bill.findMany({ include: { payments: true, unit: { include: { property: true } }, tenant: true } }),
     db.payment.findMany({ where: { paidAt: { gte, lt } } }),
     db.expense.findMany({ where: { date: { gte, lt } } }),
   ]);
@@ -25,24 +25,28 @@ export async function GET(req: Request) {
   const outcome = expensesMonth.reduce((s, e) => s + e.amount, 0);
 
   const overdue = bills
-    .filter((b) => !b.payment && new Date(b.dueDate) < now)
-    .sort((a, b) => +new Date(a.dueDate) - +new Date(b.dueDate))
+    .map((b) => ({ b, rest: b.amount - b.payments.reduce((s, p) => s + p.amount, 0) }))
+    .filter(({ rest }) => rest > 0)
+    .filter(({ b }) => new Date(b.dueDate) < now)
+    .sort((x, y) => +new Date(x.b.dueDate) - +new Date(y.b.dueDate))
     .slice(0, 10)
-    .map((b) => ({
-      id: b.id, period: b.period, amount: b.amount, dueDate: b.dueDate,
+    .map(({ b, rest }) => ({
+      id: b.id, period: b.period, amount: b.amount, remaining: rest, dueDate: b.dueDate,
       lateDays: Math.floor((now.getTime() - +new Date(b.dueDate)) / 86400000),
       tenant: b.tenant.name, phoneWa: b.tenant.phoneWa,
       unit: b.unit.code, property: b.unit.property.name,
     }));
   const dueSoon = bills
     .filter((b) => {
-      if (b.payment) return false;
+      const rest = b.amount - b.payments.reduce((s, p) => s + p.amount, 0);
+      if (rest <= 0) return false;
       const diff = Math.ceil((+new Date(b.dueDate) - now.getTime()) / 86400000);
       return diff >= 0 && diff <= 7;
     })
     .slice(0, 10)
     .map((b) => ({
-      id: b.id, period: b.period, amount: b.amount, dueDate: b.dueDate,
+      id: b.id, period: b.period, amount: b.amount,
+      remaining: b.amount - b.payments.reduce((s, p) => s + p.amount, 0), dueDate: b.dueDate,
       tenant: b.tenant.name, unit: b.unit.code, property: b.unit.property.name,
     }));
 
@@ -61,7 +65,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     month, totalUnits, occupied, vacant: totalUnits - occupied,
     income, outcome, balance: income - outcome,
-    overdueCount: overdue.length, overdueNominal: overdue.reduce((s, o) => s + o.amount, 0),
+    overdueCount: overdue.length, overdueNominal: overdue.reduce((s, o) => s + o.remaining, 0),
     overdue, dueSoon, monthly,
   });
 }

@@ -101,7 +101,7 @@ model Bill {
   note      String   @default("")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  payment   Payment?
+  payments  Payment[]
 
   @@unique([unitId, period])
   @@index([period, dueDate])
@@ -115,15 +115,16 @@ enum PaymentMethod {
 
 model Payment {
   id        String        @id @default(cuid())
-  billId    String        @unique
+  billId    String // 1 tagihan boleh banyak pembayaran (cicilan/partial)
   bill      Bill          @relation(fields: [billId], references: [id], onDelete: Cascade)
   paidAt    DateTime      @default(now())
   amount    Int
   method    PaymentMethod
   proofPath String        @default("") // relatif bukti/..., wajib bila TRANSFER, kosong bila CASH
   note      String        @default("")
-  createdAt DateTime      @default(now())
+  createdAt DateTime @default(now())
 
+  @@index([billId])
   @@index([paidAt])
 }
 

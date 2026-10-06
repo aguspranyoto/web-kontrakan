@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,30 +8,48 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useUI } from "@/lib/store";
+import { formatIDR } from "@/lib/format";
 
-// Dialog bayar CASH/TRANSFER + upload bukti (wajib TRANSFER, max 2MB)
-export function PayDialog({ billAmount }: { billAmount: number }) {
-  const { sheet, billId, closeSheet } = useUI();
-  const open = sheet === "pay" && !!billId;
+export type PayBill = { id: string; amount: number; remaining: number };
+
+// Dialog bayar CASH/TRANSFER + upload bukti (wajib TRANSFER, max 2MB).
+// Nominal custom max = sisa (boleh nyicil, TF selalu pas).
+export function PayDialog({ bill }: { bill: PayBill | null }) {
+  const { sheet, closeSheet } = useUI();
+  const open = sheet === "pay" && !!bill;
   const qc = useQueryClient();
   const [method, setMethod] = useState<"CASH" | "TRANSFER">("TRANSFER");
   const [amount, setAmount] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
 
+  useEffect(() => {
+    if (open) {
+      setAmount("");
+      setFile(null);
+      setMethod("TRANSFER");
+    }
+  }, [open, bill?.id]);
+
   const mut = useMutation({
     mutationFn: async () => {
+      if (!bill) throw new Error("Tagihan tidak dipilih");
+      const nominal = Number(amount || String(bill.remaining));
+      if (!Number.isInteger(nominal) || nominal < 1) throw new Error("Nominal tidak valid");
+      if (nominal > bill.remaining) throw new Error(`Nominal melebihi sisa (${formatIDR(bill.remaining)})`);
       const fd = new FormData();
       fd.set("method", method);
-      fd.set("amount", amount || String(billAmount));
+      fd.set("amount", String(nominal));
       if (file) fd.set("file", file);
-      const r = await fetch(`/api/bills/${billId}/pay`, { method: "POST", body: fd });
+      const r = await fetch(`/api/bills/${bill.id}/pay`, { method: "POST", body: fd });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Gagal simpan pembayaran");
-      return j;
+      return { j, nominal };
     },
-    onSuccess: () => {
+    onSuccess: ({ nominal }) => {
       ["bills", "dashboard"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-      toast.success("Pembayaran lunas tersimpan");
+      toast.success(
+        bill && nominal >= bill.remaining ? "Pembayaran lunas tersimpan" : `Cicilan ${formatIDR(nominal)} tersimpan`,
+      );
       setFile(null);
       setAmount("");
       closeSheet();
@@ -44,6 +62,11 @@ export function PayDialog({ billAmount }: { billAmount: number }) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Input pembayaran</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-3">
+          {bill && (
+            <p className="text-sm text-muted-foreground">
+              Tagihan {formatIDR(bill.amount)} · Sisa {formatIDR(bill.remaining)}
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-2">
             {(["CASH", "TRANSFER"] as const).map((m) => (
               <Button key={m} variant={method === m ? "default" : "outline"} onClick={() => setMethod(m)}>
@@ -52,8 +75,12 @@ export function PayDialog({ billAmount }: { billAmount: number }) {
             ))}
           </div>
           <div className="grid gap-1.5">
-            <Label>Nominal (Rp)</Label>
-            <Input type="number" min={1} placeholder={String(billAmount)} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <Label>Nominal (Rp) — max sisa, boleh kurang (nyicil)</Label>
+            <Input
+              type="number" min={1} max={bill?.remaining ?? undefined}
+              placeholder={bill ? String(bill.remaining) : ""}
+              value={amount} onChange={(e) => setAmount(e.target.value)}
+            />
           </div>
           {method === "TRANSFER" && (
             <div className="grid gap-1.5">
@@ -63,7 +90,7 @@ export function PayDialog({ billAmount }: { billAmount: number }) {
             </div>
           )}
           <Button disabled={mut.isPending} className="w-full" onClick={() => mut.mutate()}>
-            {mut.isPending ? "Menyimpan..." : "Simpan lunas"}
+            {mut.isPending ? "Menyimpan..." : "Simpan pembayaran"}
           </Button>
         </div>
       </DialogContent>

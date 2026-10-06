@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     include: {
       unit: { include: { property: true } },
       tenant: true,
-      bills: { include: { payment: true }, orderBy: { period: "desc" } },
+      bills: { include: { payments: { select: { amount: true, method: true } } }, orderBy: { period: "desc" } },
     },
     orderBy: { startDate: "desc" },
   });
